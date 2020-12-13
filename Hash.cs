@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Linq;
 
 namespace blockchain
 {
@@ -8,7 +9,7 @@ namespace blockchain
     {
         public const int count = 64;
 
-        public static char[] hashFunc(string inputString)
+        public static char[] hashFunc(string inputString, bool isMining = false)
         {
             byte[] ba;
             byte[] newBa;
@@ -108,8 +109,25 @@ namespace blockchain
 
             finalHashString[count - 2] = finalHashString[count - 4];
             finalHashString[count - 1] = finalHashString[count - 8];
+            finalHashString[0] = '0';
+            if (isMining)
+            {
+                for (int i = 1; i < 5; i++)
+                {
+                    finalHashString[i] = randomChar()[0];
+                }
+            }
 
             return finalHashString;
+        }
+
+        public static string randomChar()
+        {
+            Random random = new Random();
+            const string chars = "ABCDEF0123456789";
+
+            return new string(Enumerable.Repeat(chars, 1)
+              .Select(s => s[random.Next(s.Length)]).ToArray());
         }
     }
 }
