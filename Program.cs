@@ -167,6 +167,8 @@ namespace blockchain
             string tempTxId = string.Empty;
             int index;
             bool redFlag = false;
+            bool isMerkleHashFound = false;
+            List<string> merkleTree = new List<string>();
 
             if (txPool.Count <= count) { count = txPool.Count; }
             for (int i = 0; i < count; i++)
@@ -194,13 +196,40 @@ namespace blockchain
                 {
                     block.TxPool = new List<Transaction>();
                     block.TxPool.Add(txPool[index]);
-                    tempTxId += txPool[index].ID;
+                    merkleTree.Add(txPool[index].ID);
                 }
                 txPool.RemoveAt(index);
             }
-            block.merkelRootHash = new string(Hash.hashFunc(tempTxId));
+
+            block.merkelRootHash = BuildMerkleRoot(merkleTree);
 
             return block;
+        }
+
+        static string BuildMerkleRoot(List<String> merkleTree)
+        {
+            List<string> merkleBranches = new List<String>();
+            string tempHash = "";
+
+            if (!merkleTree.Any())
+            {
+                return "";
+            }
+            if (merkleTree.Count() == 1)
+            {
+                return merkleTree.First();
+            }
+            if (merkleTree.Count() % 2 > 0)
+            {
+                merkleTree.Add(merkleTree.Last());
+            }
+            for (int i = 0; i < merkleTree.Count; i += 2)
+            {
+                var leafPair = string.Concat(merkleTree[i], merkleTree[i + 1]);
+                tempHash = new string(Hash.hashFunc(leafPair)); ;
+                merkleBranches.Add(tempHash);
+            }
+            return BuildMerkleRoot(merkleBranches);
         }
     }
 }

@@ -21,6 +21,10 @@ v0.1
 
 Pilnai padaryta v0.1 užduoties versija
 
+v0.1.5
+
+Pridėtas transakcijų hashavimas pagal Merkle Tree metodą.
+
 ## Naudotos klasių struktūros
 
 ###### Block.cs
