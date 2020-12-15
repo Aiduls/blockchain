@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Diagnostics;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace blockchain
 {
@@ -28,8 +30,11 @@ namespace blockchain
             while (TxPool.Count > 0)
             {
                 Console.WriteLine("{0} transactions left in the pool. Mining process started.", TxPool.Count);
+
+
                 mineBlock(Blockchain, TxPool, Users);
             }
+
         }
         
         public static string RandomString(int length)
@@ -83,7 +88,7 @@ namespace blockchain
             newBlock.timestamp = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds();
             newBlock.version = blockCount;
             newBlock.nonce = 0;
-            newBlock.diffTarget = "0000";
+            newBlock.diffTarget = "00000";
             newBlock.TxPool = new List<Transaction>();
             for (int i = 0; i < count; i++)
             {
@@ -107,7 +112,8 @@ namespace blockchain
             var timer = new Stopwatch();
 
             prevBlock = Blockchain.Last();
-            Console.WriteLine("Difficulty target: {0}.\nMining new block . . .\n", prevBlock.diffTarget);
+
+            Console.WriteLine("Mining new block . . .\n", prevBlock.diffTarget);
             
             timer.Start();
 
@@ -165,40 +171,47 @@ namespace blockchain
         public static Block processNewTrx(List<Transaction> txPool, int count, Block block, List<User> Users)
         {
             string tempTxId = string.Empty;
-            int index;
             bool redFlag = false;
-            bool isMerkleHashFound = false;
             List<string> merkleTree = new List<string>();
 
             if (txPool.Count <= count) { count = txPool.Count; }
             for (int i = 0; i < count; i++)
             {
                 redFlag = false;
-                index = random.Next(txPool.Count);
 
-                foreach (var user in Users)
+                // Transaction hash verification
+                if (txPool[i].ID != new string( Hash.hashFunc(txPool[i].Sender + txPool[i].Receiver + txPool[i].Amount.ToString() )))
                 {
-                    if (user.hashKey == txPool[index].Sender)
+                    redFlag = true;
+                    Console.WriteLine("ERROR: Transaction {0} hashes don't match", txPool[i].ID);
+                }
+
+                // Balance verification
+                foreach (var user in Users) 
+                {
+                    if (user.hashKey == txPool[i].Sender)
                     {
-                        user.balance -= txPool[index].Amount;
+                        user.balance -= txPool[i].Amount;
                         if (user.balance < 0)
                         {
+                            Console.WriteLine("ERROR: User {0} has insufficient funds for transaction {1}", user.hashKey, txPool[i].ID);
                             redFlag = true;
                             break;
                         }
                     }
-                    else if (user.hashKey == txPool[index].Receiver)
+                    else if (user.hashKey == txPool[i].Receiver)
                     {
-                        user.balance += txPool[index].Amount;
+                        user.balance += txPool[i].Amount;
                     }
                 }
                 if (!redFlag)
                 {
                     block.TxPool = new List<Transaction>();
-                    block.TxPool.Add(txPool[index]);
-                    merkleTree.Add(txPool[index].ID);
+                    block.TxPool.Add(txPool[i]);
+                    merkleTree.Add(txPool[i].ID);
                 }
-                txPool.RemoveAt(index);
+
+                txPool.RemoveAt(i);
             }
 
             block.merkelRootHash = BuildMerkleRoot(merkleTree);
