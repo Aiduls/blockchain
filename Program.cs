@@ -13,6 +13,8 @@ namespace blockchain
 
         private static int userCount = 0;
         public static int blockCount = 0;
+        public static bool isCancelled = false;
+        //static CancellationTokenSource _tokenSource;
 
         static void Main(string[] args)
         {
@@ -27,16 +29,30 @@ namespace blockchain
             block = applyTxsToBlock(TxPool, 100);
             Blockchain.Add(block);
 
+            ParallelOptions po = new ParallelOptions();
+            po.MaxDegreeOfParallelism = 5;
+
             while (TxPool.Count > 0)
             {
-                Console.WriteLine("{0} transactions left in the pool. Mining process started.", TxPool.Count);
-
-
-                mineBlock(Blockchain, TxPool, Users);
+                Console.WriteLine("There are transactions left in the pool. Mining process started.");
+                if (TxPool.Count >= 500)
+                {
+                    isCancelled = false;
+                    Parallel.Invoke(
+                    () => mineBlock(Blockchain, TxPool.GetRange(0, 100), Users, TxPool),
+                    () => mineBlock(Blockchain, TxPool.GetRange(100, 200), Users, TxPool),
+                    () => mineBlock(Blockchain, TxPool.GetRange(200, 300), Users, TxPool),
+                    () => mineBlock(Blockchain, TxPool.GetRange(300, 400), Users, TxPool),
+                    () => mineBlock(Blockchain, TxPool.GetRange(400, 500), Users, TxPool));
+                }
+                else
+                {
+                    mineBlock(Blockchain, TxPool, Users, TxPool);
+                }
             }
 
+
         }
-        
         public static string RandomString(int length)
         {
             const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -88,7 +104,7 @@ namespace blockchain
             newBlock.timestamp = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds();
             newBlock.version = blockCount;
             newBlock.nonce = 0;
-            newBlock.diffTarget = "00000";
+            newBlock.diffTarget = "000000";
             newBlock.TxPool = new List<Transaction>();
             for (int i = 0; i < count; i++)
             {
@@ -103,7 +119,7 @@ namespace blockchain
             return newBlock;
         }
 
-        public static void mineBlock(List<Block> Blockchain, List<Transaction> txPool, List<User> Users)
+        public static void mineBlock(List<Block> Blockchain, List<Transaction> txPool, List<User> Users, List<Transaction> fullTxPool)
         {
             Block prevBlock = new Block();
             string newHash = "";
@@ -113,27 +129,33 @@ namespace blockchain
 
             prevBlock = Blockchain.Last();
 
-            Console.WriteLine("Mining new block . . .\n", prevBlock.diffTarget);
-            
+            Console.WriteLine("Current thread: {0}\nMining new block . . .\n", Thread.CurrentThread.ManagedThreadId);
+
             timer.Start();
 
             while (!isMined)
             {
-                tempHash = prevBlock.prevHash + prevBlock.timestamp + prevBlock.version + prevBlock.merkelRootHash + prevBlock.nonce + prevBlock.diffTarget;
-                newHash = new string(Hash.hashFunc(tempHash, true));
-                using (System.IO.StreamWriter file =
-                new System.IO.StreamWriter(@"D:\Mokslai\3 semestras\blockchain\blockchain\UsedHashesInMining.txt", true))
+                try
                 {
-                    file.WriteLine(newHash);
+                    isThreadCancelled();
+                    tempHash = prevBlock.prevHash + prevBlock.timestamp + prevBlock.version + prevBlock.merkelRootHash + prevBlock.nonce + prevBlock.diffTarget;
+                    newHash = new string(Hash.hashFunc(tempHash, true));
+                    if (newHash.Substring(0, prevBlock.diffTarget.Length) == prevBlock.diffTarget)
+                    {
+                        isThreadCancelled();
+                        isMined = true;
+                        isCancelled = true;
+                        Console.WriteLine("New block has been mined. Lucky thread: {0}. Hash: {1}", Thread.CurrentThread.ManagedThreadId, newHash);
+                    }
+                    else
+                    {
+                        prevBlock.nonce++;
+                        isThreadCancelled();
+                    }
                 }
-                if (newHash.Substring(0, prevBlock.diffTarget.Length) == prevBlock.diffTarget)
+                catch (TaskCanceledException e)
                 {
-                    isMined = true;
-                    Console.WriteLine("New block has been mined. Hash: " + newHash);
-                }
-                else
-                {
-                    prevBlock.nonce++;
+                    return;
                 }
             }
 
@@ -141,11 +163,13 @@ namespace blockchain
             TimeSpan timeTaken = timer.Elapsed;
             Console.WriteLine("Time taken for mining: {0}s", timeTaken.ToString(@"s\.fff"));
 
-            addNewBlock(Blockchain, prevBlock.nonce, txPool, Users);
+            addNewBlock(Blockchain, prevBlock.nonce, txPool, Users, fullTxPool);
+
         }
 
-        public static Block addNewBlock(List<Block> Blockchain, int nonce, List<Transaction> txPool, List<User> Users)
+        public static Block addNewBlock(List<Block> Blockchain, int nonce, List<Transaction> txPool, List<User> Users, List<Transaction> fullTxPool)
         {
+            
             string tempPrevHash = string.Empty;
 
             Block prevBlock = new Block();
@@ -163,38 +187,38 @@ namespace blockchain
             newBlock.nonce = nonce;
             newBlock.diffTarget = prevBlock.diffTarget;
 
-            newBlock = processNewTrx(txPool, 100, newBlock, Users);
+            newBlock = processNewTrx(txPool, newBlock, Users, fullTxPool);
 
             return newBlock;
         }
 
-        public static Block processNewTrx(List<Transaction> txPool, int count, Block block, List<User> Users)
+        public static Block processNewTrx(List<Transaction> txPool, Block block, List<User> Users, List<Transaction> fullTxPool)
         {
             string tempTxId = string.Empty;
             bool redFlag = false;
             List<string> merkleTree = new List<string>();
+            List<string> trxToBeRemoved = new List<string>();
 
-            if (txPool.Count <= count) { count = txPool.Count; }
-            for (int i = 0; i < count; i++)
+            for (int i = 0; i < txPool.Count; i++)
             {
                 redFlag = false;
 
                 // Transaction hash verification
-                if (txPool[i].ID != new string( Hash.hashFunc(txPool[i].Sender + txPool[i].Receiver + txPool[i].Amount.ToString() )))
+                if (txPool[i].ID != new string(Hash.hashFunc(txPool[i].Sender + txPool[i].Receiver + txPool[i].Amount.ToString())))
                 {
                     redFlag = true;
                     Console.WriteLine("ERROR: Transaction {0} hashes don't match", txPool[i].ID);
                 }
 
                 // Balance verification
-                foreach (var user in Users) 
+                foreach (var user in Users)
                 {
                     if (user.hashKey == txPool[i].Sender)
                     {
                         user.balance -= txPool[i].Amount;
                         if (user.balance < 0)
                         {
-                            Console.WriteLine("ERROR: User {0} has insufficient funds for transaction {1}", user.hashKey, txPool[i].ID);
+                            //Console.WriteLine("warning: User {0} has insufficient funds for transaction {1}", user.hashKey, txPool[i].ID);
                             redFlag = true;
                             break;
                         }
@@ -211,7 +235,7 @@ namespace blockchain
                     merkleTree.Add(txPool[i].ID);
                 }
 
-                txPool.RemoveAt(i);
+                fullTxPool.RemoveAt(i);
             }
 
             block.merkelRootHash = BuildMerkleRoot(merkleTree);
@@ -243,6 +267,14 @@ namespace blockchain
                 merkleBranches.Add(tempHash);
             }
             return BuildMerkleRoot(merkleBranches);
+        }
+
+        public static void isThreadCancelled()
+        {
+            if (isCancelled)
+            {
+                throw new TaskCanceledException();
+            }
         }
     }
 }

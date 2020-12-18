@@ -25,6 +25,14 @@ v0.1.5
 
 Pridėtas transakcijų hashavimas pagal Merkle Tree metodą.
 
+v0.1.6
+
+Pridėtas transakcijų hashų verifikavimas
+
+v2.0
+
+Mininimas atliekamas lygiagrečiu programavimu, "laimi" tik vienas threadas, atlikęs darbą greičiausiai.
+
 ## Naudotos klasių struktūros
 
 ###### Block.cs
@@ -84,3 +92,9 @@ Pagrindinė logika vyksta `Program.cs` faile.
   - Mininamas blokas. Keičiantis nonce skaičiui, ieškoma hash'o su tinkamu difficulty target'u. Visi bandyti hashai išvedami į failą.
   - Kai surandamas tinkamas hashas, naujajam blokui priskiriami reikiami header'io duomenys (praeito bloko hashas, laiko žyma ir t.t.)
   - Naujajam blokui priskiriamos **tinkamos** transakcijos. Siunčiama 100 kandidatų, tačiau neteisingos transakcijos gali būti atmestos.
+
+##### v0.2
+
+- Pridėtas transakcijų hashavimas pagal Merkle Tree metodą.
+- Pridėtas transakcijų hashų verifikavimas
+- Mininimas atliekamas lygiagrečiu programavimu, "laimi" tik vienas threadas, atlikęs darbą greičiausiai. Reikiamos transakcijos ištrinamos iš bendro poolo, ciklas juda toliau kol visos transakcijos nesibaigia (vėl jungiami visi threadai).

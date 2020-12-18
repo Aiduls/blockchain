@@ -112,7 +112,7 @@ namespace blockchain
             finalHashString[0] = '0';
             if (isMining)
             {
-                for (int i = 1; i < 5; i++)
+                for (int i = 1; i < 8; i++)
                 {
                     finalHashString[i] = randomChar()[0];
                 }
